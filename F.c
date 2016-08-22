@@ -15,14 +15,14 @@ typedef struct _KMInfo {
 
 KMInfo di = {0};
 
-void Reset(int len,float* out,float* rLen, float* code, float* tmp) {
+void Reset_REF(int len,float* out,float* rLen, float* code, float* tmp) {
 	memset(buf, 0, sizeof buf);
 	di.dateLen = (int)rLen[0];
 	di.code = (int)code[0];
 }
 
 // MACD 底背离 
-void CrossInfo(int len,float* out, float* k, float* m, float* c) {
+void CrossInfo_REF(int len,float* out, float* k, float* m, float* c) {
 	static int cp[100];   // 交叉点位置
 	static int cpLow[100];
 	static float price[100]; //最低价 
@@ -74,7 +74,7 @@ void CrossInfo(int len,float* out, float* k, float* m, float* c) {
 }
 
 // 计算最大跌幅  close = [..., ref(cose,1), ref(cose,0)]
-void CalcMaxDF(int len,float* pfOUT,float* days, float* close,float* code)
+void CalcMaxDF_REF(int len,float* pfOUT,float* days, float* close,float* code)
 {
 	int dayLen = days[0];
 	float maxDay = 0, maxVal = 0, minDay = 0, minVal = 1000000;
@@ -99,7 +99,7 @@ void CalcMaxDF(int len,float* pfOUT,float* days, float* close,float* code)
 }
 
 // 计算最大涨幅  close = [..., ref(cose,1), ref(cose,0)]
-void CalcMaxZF(int len,float* pfOUT,float* days, float* close,float* code)
+void CalcMaxZF_REF(int len,float* pfOUT,float* days, float* close,float* code)
 {
 	int dayLen = days[0];
 	float maxDay = 0, maxVal = 0, minDay = 0, minVal = 1000000;
@@ -230,7 +230,7 @@ static void _CalcXt(List *xtList, float* mid, int len, int day) {
 
 static List *xtList = NULL;
 static List *xtMergedList = NULL;
-void BOLLXT(int len, float* out, float* mid, float* days, float* dwn) {
+void BOLLXT_REF(int len, float* out, float* mid, float* days, float* dwn) {
 	if (xtList == NULL) xtList = ListNew(500, sizeof(XtInfo));
 	if (xtMergedList == NULL) xtMergedList = ListNew(500, sizeof(XtInfo));
 	int day = (int)days[0];
@@ -277,14 +277,14 @@ void BOLLXT_mrg_test(int len, float* out, float* mid, float* days, float* c) {
 		out[i] = minVal;
 	}
 	
-	sprintf(buf, "\n---------Mrg------------");
-	Log(buf);
+	//sprintf(buf, "\n---------Mrg------------");
+	//Log(buf);
 	for (int i = 0; i < xtMergedList->size; ++i) {
 		XtInfo *s = (XtInfo*)ListGet(xtMergedList, i);
 		out[s->beginPos] = s->beginVal;
-		sprintf(buf, "Pos:[%d -> %d] [%.2f -> %.2f] | Dir:%d  ZF:%.2f",  s->beginPos-len+day, s->endPos-len+day, 
-			s->beginVal, s->endVal, s->dir, (s->endVal - s->beginVal) * 100 / s->beginVal);
-		Log(buf);
+		//sprintf(buf, "Pos:[%d -> %d] [%.2f -> %.2f] | Dir:%d  ZF:%.2f",  s->beginPos-len+day, s->endPos-len+day, 
+		//	s->beginVal, s->endVal, s->dir, (s->endVal - s->beginVal) * 100 / s->beginVal);
+		//Log(buf);
 	}
 }
 
@@ -309,45 +309,52 @@ void BOLLXT_3_test(int len, float* out, float* mid, float* days, float* dwn) {
 // 在指定的日期上， 是第几个交易日（以最近交易日为零开始算） 
 // Eg: 如果当前日期是2016.8.19， 那么8.19就返回0； 8.18返回1
 // out = [日数] ; 假设date=[..., 2016.8.19] 而days=2016.8.20则 返回0 
-void CalcTradeDayInfo(int len, float* out, float* days, float* date, float* c) {
-	int d = (int)days[0];
-	int rb = -1;
+void CalcTradeDayInfo_REF(int len, float* out, float* days, float* date, float* code) {
+	int d = (int)days[0] + 20000000;
+	int rb = 0;
 	int last = (int)date[len - 1] + 19000000;
 	if (d > last) {
 		out[len - 1] = 0;
 		return;
 	}
 	
-	for (int i = len - 1; i >= 0; --i) {
+	for (int i = len - 1, j = 0; i >= 0; --i, ++j) {
 		int cd = (int)date[i] + 19000000;
 		if (d == cd) {
-			rb = i;
+			rb = j;
 			break;
 		}
 		if (cd < d) {
-			rb = i + 1;
+			rb = j - 1;
 			break;
 		}
 	}
-	
-	if (rb == -1) out[len - 1] = 0;
-	else out[len - 1] = len - 1 - rb;
+	out[len - 1] = rb;
+}
+
+//------------------------------------------------------------------------------
+// 指定的日期是否是交易日 
+void IsTradDay_REF(int len, float* out, float* days, float* b, float* c) {
+	int d = (int)days[0];
+	int v = IsTradeDay(d / 10000, d / 100 % 100, d % 100);
+	out[len - 1] = v;
 }
 
 //------------------------------------------------------------------------------
 PluginTCalcFuncInfo g_CalcFuncSets[] = 
 {
-	{10,(pPluginFUNC)&Reset},
-	{11,(pPluginFUNC)&CrossInfo},
+	{10,(pPluginFUNC)&Reset_REF},
+	{11,(pPluginFUNC)&CrossInfo_REF},
 	
-	{20,(pPluginFUNC)&CalcMaxDF},
-	{21,(pPluginFUNC)&CalcMaxZF},
+	{20,(pPluginFUNC)&CalcMaxDF_REF},
+	{21,(pPluginFUNC)&CalcMaxZF_REF},
 	
-	{30,(pPluginFUNC)&BOLLXT},
+	{30,(pPluginFUNC)&BOLLXT_REF},
 	{33,(pPluginFUNC)&BOLLXT_3_test},   // test
 	{34,(pPluginFUNC)&BOLLXT_mrg_test}, // test
 	
-	{100,(pPluginFUNC)&CalcTradeDayInfo},
+	{100,(pPluginFUNC)&CalcTradeDayInfo_REF},
+	{101,(pPluginFUNC)&IsTradDay_REF},
 	{0,NULL},
 };
 

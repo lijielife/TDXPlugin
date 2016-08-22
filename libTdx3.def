@@ -1,4 +1,4 @@
-; dlltool --base-file C:\Users\ADMINI~1\AppData\Local\Temp\cca04548.base --output-exp Tdx3.exp --dllname Tdx3.dll --output-def libTdx3.def --no-export-all-symbols --add-stdcall-alias --exclude-symbol=DllMainCRTStartup@12 --def C:\Users\ADMINI~1\AppData\Local\Temp\cca04548.def --output-lib libTdx3.a
+; dlltool --base-file C:\Users\ADMINI~1\AppData\Local\Temp\cca05428.base --output-exp Tdx3.exp --dllname Tdx3.dll --output-def libTdx3.def --no-export-all-symbols --add-stdcall-alias --exclude-symbol=DllMainCRTStartup@12 --def C:\Users\ADMINI~1\AppData\Local\Temp\cca05428.def --output-lib libTdx3.a
 EXPORTS
 	RegisterTdxFunc @ 1
 	HelloWorld @ 2
