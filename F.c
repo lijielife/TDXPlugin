@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <math.h> 
+#include <windows.h>
 
 static char buf[300];
 #define BUF (buf+strlen(buf))
@@ -341,6 +342,101 @@ void IsTradDay_REF(int len, float* out, float* days, float* b, float* c) {
 }
 
 //------------------------------------------------------------------------------
+// .401 排序信息 
+typedef struct _SortInfo {
+	int code;  //股票代码
+	float val;
+	// 排序相关 
+	int idx;
+	int prev;
+	int next;
+} SortInfo;
+
+struct _SI {
+	List *siList; // List<SortInfo>
+	DWORD lastTime;
+	int firstIdx;
+	CRITICAL_SECTION mutex;
+} si;
+
+void SetSortInfo_REF(int len, float* out, float* code, float* val, float* c) {
+	EnterCriticalSection(&si.mutex);
+	if (si.siList == NULL) si.siList = ListNew(5000, sizeof(SortInfo));
+	SortInfo info = {0};
+	DWORD diff = GetTickCount() - si.lastTime;
+	if (diff > 1000) { //大于1000毫秒，表示重新开始的排序 
+		ListClear(si.siList);
+		si.firstIdx = -1;
+	}
+	info.code = (int)code[0];
+	info.val = val[len-1];
+	info.idx = si.siList->size;
+	info.prev = info.next = -1;
+	
+	// begin sort
+	if (si.firstIdx == -1) {
+		si.firstIdx = 0;
+		ListAdd(si.siList, &info);
+	} else {
+		int findIdx = -1;
+		int before = -1; //向前插入? 
+		for (int i = si.firstIdx; i >= 0 && i < si.siList->size;) {
+			SortInfo* t = (SortInfo*)ListGet(si.siList, i);
+			if (info.val > t->val) {
+				findIdx = i;
+				before = 1;
+				break;
+			}
+			if (t->next == -1) {
+				findIdx = i;
+				before = 0;
+				break;
+			}
+			i = t->next;
+		}
+		if (before == 1) {
+			SortInfo* t = (SortInfo*)ListGet(si.siList, findIdx);
+			info.prev = t->prev;
+			info.next = t->idx;
+			if (t->prev != -1) {
+				SortInfo* p = (SortInfo*)ListGet(si.siList, t->prev);
+				p->next = info.idx;
+			} else {
+				si.firstIdx = info.idx;
+			}
+			t->prev = info.idx;
+			ListAdd(si.siList, &info);
+		} else if (before == 0) {
+			SortInfo* t = (SortInfo*)ListGet(si.siList, findIdx);
+			info.prev = t->idx;
+			info.next = - 1;
+			t->next = info.idx;
+			ListAdd(si.siList, &info);
+		} else {
+			sprintf(buf, "Error: before = -1  code = %d val=%f", info.code, info.val);
+			Log(buf);
+		}
+	}
+	
+	si.lastTime = GetTickCount();
+	LeaveCriticalSection(&si.mutex);
+}
+
+void GetSortInfo_REF(int len, float* out, float* code, float* b, float* c) {
+	int cc = (int)code[0];
+	if (si.firstIdx == -1) {
+		return;
+	}
+	for (int i = si.firstIdx, j = 0; i >= 0 && i < si.siList->size; ++j) {
+		SortInfo* t = (SortInfo*)ListGet(si.siList, i);
+		if (t->code == cc) {
+			out[len-1] = j;
+			break;
+		}
+		i = t->next;
+	}
+}
+//------------------------------------------------------------------------------
 PluginTCalcFuncInfo g_CalcFuncSets[] = 
 {
 	{10,(pPluginFUNC)&Reset_REF},
@@ -353,6 +449,9 @@ PluginTCalcFuncInfo g_CalcFuncSets[] =
 	{33,(pPluginFUNC)&BOLLXT_3_test},   // test
 	{34,(pPluginFUNC)&BOLLXT_mrg_test}, // test
 	
+	{40,(pPluginFUNC)&SetSortInfo_REF},
+	{41,(pPluginFUNC)&GetSortInfo_REF},
+	
 	{100,(pPluginFUNC)&CalcTradeDayInfo_REF},
 	{101,(pPluginFUNC)&IsTradDay_REF},
 	{0,NULL},
@@ -364,6 +463,7 @@ BOOL RegisterTdxFunc(PluginTCalcFuncInfo** pFun)
 	if(*pFun==NULL) {
 		(*pFun)=g_CalcFuncSets;
 		InitHolidays();
+		InitializeCriticalSection(&si.mutex);
 		return TRUE;
 	}
 	
