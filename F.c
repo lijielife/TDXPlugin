@@ -342,6 +342,22 @@ void IsTradDay_REF(int len, float* out, float* days, float* b, float* c) {
 }
 
 //------------------------------------------------------------------------------
+// 是否是停牌股 out = [1:是  0：不是] 
+void IsTP_REF(int len, float* out, float* date, float* vol, float* c) {
+	int last = GetLastTradeDay();
+	int day0 = (int)date[len-1] + 19000000;
+	int day1 = (int)date[len-2] + 19000000;
+	
+	if (last == day0) {
+		out[len-1] = (vol[len-1] == 0);
+	} else if (last == day1) {
+		out[len-1] = (vol[len-2] == 0);
+	} else {
+		out[len-1] = 1;
+	}
+}
+
+//------------------------------------------------------------------------------
 // .401 排序信息 
 typedef struct _SortInfo {
 	int code;  //股票代码
@@ -435,7 +451,9 @@ void GetSortInfo_REF(int len, float* out, float* code, float* b, float* c) {
 		i = t->next;
 	}
 }
+
 //------------------------------------------------------------------------------
+
 PluginTCalcFuncInfo g_CalcFuncSets[] = 
 {
 	{10,(pPluginFUNC)&Reset_REF},
@@ -453,6 +471,7 @@ PluginTCalcFuncInfo g_CalcFuncSets[] =
 	
 	{100,(pPluginFUNC)&CalcTradeDayInfo_REF},
 	{101,(pPluginFUNC)&IsTradDay_REF},
+	{102,(pPluginFUNC)&IsTP_REF},
 	{0,NULL},
 };
 

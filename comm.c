@@ -192,8 +192,8 @@ int GetLastTradeDay() {
     struct tm *tblock;
     timer = time(NULL);
     tblock = localtime(&timer);
-    if (tblock->tm_hour < 9) {
-    	timer -= 14*3600;
+    if ((tblock->tm_hour * 100 + tblock->tm_min) < 930) {
+    	timer -= 12*3600;
     }
     while (1) {
     	tblock = localtime(&timer);
