@@ -424,10 +424,9 @@ void SetSortInfo_REF(int len, float* out, float* code, float* val, float* c) {
 
 void GetSortInfo_REF(int len, float* out, float* code, float* b, float* c) {
 	int cc = (int)code[0];
-	if (si.firstIdx == -1) {
-		return;
-	}
-	for (int i = si.firstIdx, j = 0; i >= 0 && i < si.siList->size; ++j) {
+	out[len-1] = 0;
+	
+	for (int i = si.firstIdx, j = 0; i >= 0 && si.siList != NULL && i < si.siList->size; ++j) {
 		SortInfo* t = (SortInfo*)ListGet(si.siList, i);
 		if (t->code == cc) {
 			out[len-1] = j;
