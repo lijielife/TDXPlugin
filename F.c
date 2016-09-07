@@ -368,36 +368,30 @@ typedef struct _SortInfo {
 	int next;
 } SortInfo;
 
+#define SI_LIST_NUM 2
 struct _SI {
-	List *siList; // List<SortInfo>
+	List *list[SI_LIST_NUM]; // List<SortInfo>  = [区间数据list, ...] 
+	int firstIdx[SI_LIST_NUM]; // [区间数据开始idx , ...]
 	DWORD lastTime;
-	int firstIdx;
 	CRITICAL_SECTION mutex;
 } si;
 
-void SetSortInfo_REF(int len, float* out, float* code, float* val, float* c) {
-	EnterCriticalSection(&si.mutex);
-	if (si.siList == NULL) si.siList = ListNew(5000, sizeof(SortInfo));
+static void SetSortInfo(int len, int code, float val, int* firstIdx, List *list) {
 	SortInfo info = {0};
-	DWORD diff = GetTickCount() - si.lastTime;
-	if (diff > 1000) { //大于1000毫秒，表示重新开始的排序 
-		ListClear(si.siList);
-		si.firstIdx = -1;
-	}
-	info.code = (int)code[0];
-	info.val = val[len-1];
-	info.idx = si.siList->size;
+	info.code = code;
+	info.val = val;
+	info.idx = list->size;
 	info.prev = info.next = -1;
 	
 	// begin sort
-	if (si.firstIdx == -1) {
-		si.firstIdx = 0;
-		ListAdd(si.siList, &info);
+	if (*firstIdx == -1) {
+		*firstIdx = 0;
+		ListAdd(list, &info);
 	} else {
 		int findIdx = -1;
 		int before = -1; //向前插入? 
-		for (int i = si.firstIdx; i >= 0 && i < si.siList->size;) {
-			SortInfo* t = (SortInfo*)ListGet(si.siList, i);
+		for (int i = *firstIdx; i >= 0 && i < list->size;) {
+			SortInfo* t = (SortInfo*)ListGet(list, i);
 			if (info.val > t->val) {
 				findIdx = i;
 				before = 1;
@@ -411,39 +405,60 @@ void SetSortInfo_REF(int len, float* out, float* code, float* val, float* c) {
 			i = t->next;
 		}
 		if (before == 1) {
-			SortInfo* t = (SortInfo*)ListGet(si.siList, findIdx);
+			SortInfo* t = (SortInfo*)ListGet(list, findIdx);
 			info.prev = t->prev;
 			info.next = t->idx;
 			if (t->prev != -1) {
-				SortInfo* p = (SortInfo*)ListGet(si.siList, t->prev);
+				SortInfo* p = (SortInfo*)ListGet(list, t->prev);
 				p->next = info.idx;
 			} else {
-				si.firstIdx = info.idx;
+				*firstIdx = info.idx;
 			}
 			t->prev = info.idx;
-			ListAdd(si.siList, &info);
+			ListAdd(list, &info);
 		} else if (before == 0) {
-			SortInfo* t = (SortInfo*)ListGet(si.siList, findIdx);
+			SortInfo* t = (SortInfo*)ListGet(list, findIdx);
 			info.prev = t->idx;
 			info.next = - 1;
 			t->next = info.idx;
-			ListAdd(si.siList, &info);
+			ListAdd(list, &info);
 		} else {
-			sprintf(buf, "Error: before = -1  code = %d val=%f", info.code, info.val);
+			sprintf(buf, "SetSortInfo Error: before = -1  code = %d val=%f", info.code, info.val);
 			Log(buf);
 		}
 	}
+}
+
+// id = [0:区间数据, 1] 
+void SetSortInfo_REF(int len, float* out, float* code, float* val, float* id) {
+	EnterCriticalSection(&si.mutex);
+	if (si.list[0] == NULL) {
+		for (int i = 0; i < SI_LIST_NUM; ++i) {
+			si.list[i] = ListNew(5000, sizeof(SortInfo));
+		}
+	}
+	DWORD diff = GetTickCount() - si.lastTime;
+	if (diff > 1000) { //大于1000毫秒，表示重新开始的排序 
+		for (int i = 0; i < SI_LIST_NUM; ++i) {
+			ListClear(si.list[i]);
+			si.firstIdx[i] = -1;
+		}
+	}
+	
+	int _id = (int)id[0];
+	SetSortInfo(len, (int)code[0], val[len-1], &(si.firstIdx[_id]), si.list[_id]);
 	
 	si.lastTime = GetTickCount();
 	LeaveCriticalSection(&si.mutex);
 }
 
-void GetSortInfo_REF(int len, float* out, float* code, float* b, float* c) {
+void GetSortInfo_REF(int len, float* out, float* code, float* id, float* c) {
 	int cc = (int)code[0];
 	out[len-1] = 0;
+	int _id = (int)id[0];
 	
-	for (int i = si.firstIdx, j = 0; i >= 0 && si.siList != NULL && i < si.siList->size; ++j) {
-		SortInfo* t = (SortInfo*)ListGet(si.siList, i);
+	for (int i = si.firstIdx[_id], j = 0; i >= 0 && si.list[_id] != NULL && i < si.list[_id]->size; ++j) {
+		SortInfo* t = (SortInfo*)ListGet(si.list[_id], i);
 		if (t->code == cc) {
 			out[len-1] = j + 1;
 			break;
@@ -453,7 +468,26 @@ void GetSortInfo_REF(int len, float* out, float* code, float* b, float* c) {
 }
 
 //------------------------------------------------------------------------------
+struct _BOLLSK {
+	float um[30];  // up - mid
+	float ml[30];  // mid - low
+	int num;
+	CRITICAL_SECTION mutex;
+} bollSK;
+// BOLL线收口 out=[收口大小]
+void BOLLSK_REF(int len, float* out, float* up, float* mid, float* low) {
+	EnterCriticalSection(&bollSK.mutex);
+	bollSK.num = GET_MIN(len, 30);
+	for (int i = 0, j = len - bollSK.num; i < bollSK.num; ++i, ++j) {
+		bollSK.um[i] = up[j] - mid[j];
+		bollSK.ml[i] = mid[j] - low[j];
+	}
+	
+	
+	LeaveCriticalSection(&bollSK.mutex);
+}
 
+//------------------------------------------------------------------------------
 PluginTCalcFuncInfo g_CalcFuncSets[] = 
 {
 	{10,(pPluginFUNC)&Reset_REF},
@@ -469,6 +503,8 @@ PluginTCalcFuncInfo g_CalcFuncSets[] =
 	{40,(pPluginFUNC)&SetSortInfo_REF},
 	{41,(pPluginFUNC)&GetSortInfo_REF},
 	
+	{50,(pPluginFUNC)&BOLLSK_REF},
+	
 	{100,(pPluginFUNC)&CalcTradeDayInfo_REF},
 	{101,(pPluginFUNC)&IsTradDay_REF},
 	{102,(pPluginFUNC)&IsTP_REF},
@@ -482,6 +518,7 @@ BOOL RegisterTdxFunc(PluginTCalcFuncInfo** pFun)
 		(*pFun)=g_CalcFuncSets;
 		InitHolidays();
 		InitializeCriticalSection(&si.mutex);
+		InitializeCriticalSection(&bollSK.mutex);
 		return TRUE;
 	}
 	
