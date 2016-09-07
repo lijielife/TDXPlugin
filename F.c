@@ -134,8 +134,6 @@ typedef struct _XtInfo {
 } XtInfo;
 
 #define GET_DIR(b, e) (b == e ? 3 : (b < e ? 1 : 2))
-#define GET_MAX(a, b) (a > b ? a : b)
-#define GET_MIN(a, b) (a < b ? a : b)
 
 // 获取形态的震幅 %
 static float _GetXtZF(float from, float to) {
@@ -488,6 +486,38 @@ void BOLLSK_REF(int len, float* out, float* up, float* mid, float* low) {
 }
 
 //------------------------------------------------------------------------------
+// 是否是回踩Boll线中轨
+static int IsStepBackBollMid(int len, float* close, float* mid, float* low) {
+	int c1 = fabs(low[len-1] - mid[len-1]) / mid[len-1] <= 0.03;
+	int c2 = close[len-1] >= mid[len-1] && (close[len-1] - mid[len-1])/mid[len-1] <= 0.03;
+	// 近6日下跌超过 8% 
+	float max6 = GET_MAX6(close[len-1], close[len-2], close[len-3], close[len-4], close[len-5], close[len-6]);
+	float min2 = GET_MIN(close[len-1], close[len-2]);
+	int c3 = (max6 - min2) / min2 >= 0.08;
+	// 近3日下跌超过 5% 
+	float max3 = GET_MAX3(close[len-1], close[len-2], close[len-3]);
+	float min2l = GET_MIN(low[len-1], low[len-2]);
+	int c4 = (max3 - min2l) / min2l >= 0.05;
+	//近4日内的收盘价大于mid 或小于mid的3% 
+	float min4 = GET_MIN4(close[len-1], close[len-2], close[len-3], close[len-4]);
+	float minMid4 = GET_MIN4(mid[len-1], mid[len-2], mid[len-3], mid[len-4]);
+	int c5 = min4 >= minMid4 || (minMid4-min4)/min4 <= 0.03;
+	
+	return c1 && c2 && (c3 || c4) && c5;
+}
+
+void IsStepBackBollMid_REF(int len, float* out, float* close, float* mid, float* low) {
+	if (len < 20) {
+		out[len - 1] = 0;
+		return;
+	}
+	//最近3天内是否存在回踩mid线
+	out[len-1] = IsStepBackBollMid(len, close, mid, low) || 
+					IsStepBackBollMid(len-1, close, mid, low) || 
+					IsStepBackBollMid(len-2, close, mid, low);
+}
+
+//------------------------------------------------------------------------------
 PluginTCalcFuncInfo g_CalcFuncSets[] = 
 {
 	{10,(pPluginFUNC)&Reset_REF},
@@ -504,6 +534,8 @@ PluginTCalcFuncInfo g_CalcFuncSets[] =
 	{41,(pPluginFUNC)&GetSortInfo_REF},
 	
 	{50,(pPluginFUNC)&BOLLSK_REF},
+	
+	{60,(pPluginFUNC)&IsStepBackBollMid_REF},
 	
 	{100,(pPluginFUNC)&CalcTradeDayInfo_REF},
 	{101,(pPluginFUNC)&IsTradDay_REF},
