@@ -519,6 +519,7 @@ void IsStepBackBollMid_REF(int len, float* out, float* close, float* mid, float*
 
 //------------------------------------------------------------------------------
 struct {
+	int witchDay;  //哪一天 0,1,...  0:表示当日  1:昨日 ,... 
 	float close[10];
 	float low[10];
 	float high[10];
@@ -582,6 +583,10 @@ void GPStartSetParam_REF(int len, float* out, float* close, float* low, float* h
 	}
 }
 
+void GPStartSetParam2_REF(int len, float* out, float* witchDay, float* b, float* c) {
+	start.witchDay = (int)witchDay[0];
+}
+
 // 【形态选股】之股票启动  out = [0 or 1]
 void GPStart_REF(int len, float* out, float* mid, float* up, float *ma5) {
 	if (len < 15) {
@@ -594,7 +599,7 @@ void GPStart_REF(int len, float* out, float* mid, float* up, float *ma5) {
 		start.ma5[9 - i] = ma5[len - 1 - i];
 	}
 	//近两日内存在？ 
-	out[len-1] = GPStart(10) || GPStart(9);
+	out[len-1] = GPStart(10 - start.witchDay);// || GPStart(9);
 	
 	_end:
 	LeaveCriticalSection(&start.mutex);
@@ -622,6 +627,7 @@ PluginTCalcFuncInfo g_CalcFuncSets[] =
 	
 	{70,(pPluginFUNC)&GPStart_REF},
 	{71,(pPluginFUNC)&GPStartSetParam_REF},
+	{72,(pPluginFUNC)&GPStartSetParam2_REF},
 	
 	{100,(pPluginFUNC)&CalcTradeDayInfo_REF},
 	{101,(pPluginFUNC)&IsTradDay_REF},
