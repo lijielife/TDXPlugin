@@ -91,47 +91,25 @@ typedef struct _Holidays {
 	YearHoliday hol[30];
 } Holidays;
 
+typedef struct _Head {
+	int dataLen[50]; //每条数据的长度
+} Head;
+
 static Holidays hilos = {0};
-static void splitLine(char *s, YearHoliday *h) {
-	int isYear = 1;
-	int num = 0;
-	char *p = s;
-	char *e = s + strlen(s) - 1;
-	e[2] = e[3] = e[4] =  0;
-	while (*e == ' ' || *e == '\r' || *e == '\n') {
-		*e = 0;
-		--e;
-	}
-	
-	while (*s != 0) {
-		while (*s != ' ' && *s != 0) ++s;
-		*s = 0;
-		int a = atoi(p);
-		if (isYear) {
-			h->year = a;
-			isYear = 0;
-		} else {
-			h->days[num] = a;
-			num++;
-		}
-		++s;
-		p = s;
-	}
-}
 
 void InitHolidays() {
 	char path[250] = {0};
 	strcat(path, GetDllPath());
 	strcat(path, "holiday.db");
-	FILE *f = fopen(path, "r");
-	char s[300] = {0};
+	FILE *f = fopen(path, "rb");
 	if (f == NULL)
 		return;
 	memset(&hilos, 0, sizeof hilos);
-	
-	while (fgets(s, sizeof s, f) != NULL) {
-		splitLine(s, &hilos.hol[hilos.num]);
-		++hilos.num;
+	Head hd = {0};
+	fread(&hd, sizeof(hd), 1, f);
+	for (int i = 0; hd.dataLen[i] != 0; ++i) {
+		fread(&hilos.hol[i], hd.dataLen[i], 1, f);
+		hilos.num = i + 1;
 	}
 	fclose(f);
 }
