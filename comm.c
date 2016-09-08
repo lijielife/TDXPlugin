@@ -120,7 +120,10 @@ static void splitLine(char *s, YearHoliday *h) {
 }
 
 void InitHolidays() {
-	FILE *f = fopen("D:\\Program Files\\new_tdx2\\T0002\\dlls\\holiday.txt", "r");
+	char path[250] = {0};
+	strcat(path, GetDllPath());
+	strcat(path, "holiday.db");
+	FILE *f = fopen(path, "r");
 	char s[300] = {0};
 	if (f == NULL)
 		return;

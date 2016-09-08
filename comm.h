@@ -33,6 +33,8 @@ void Log(char *buf);
 
 void InitHolidays();
 
+extern char *GetDllPath();
+
 // @return YYYYMMDD
 int GetCurDay();
 

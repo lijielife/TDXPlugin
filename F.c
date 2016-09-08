@@ -427,7 +427,7 @@ static void SetSortInfo(int len, int code, float val, int* firstIdx, List *list)
 	}
 }
 
-// id = [0:区间数据, 1] 
+// id = [0:区间数据, 1:布林开口] 
 void SetSortInfo_REF(int len, float* out, float* code, float* val, float* id) {
 	EnterCriticalSection(&si.mutex);
 	if (si.list[0] == NULL) {
@@ -518,6 +518,89 @@ void IsStepBackBollMid_REF(int len, float* out, float* close, float* mid, float*
 }
 
 //------------------------------------------------------------------------------
+struct {
+	float close[10];
+	float low[10];
+	float high[10];
+	float mid[10];
+	float up[10];
+	float ma5[10];
+	CRITICAL_SECTION mutex;
+} start;
+
+#define C(x) start.close[len-1-(x)]
+#define H(x) start.high[len-1-(x)]
+#define L(x) start.low[len-1-(x)]
+#define M(x) start.mid[len-1-(x)]
+#define A(X) start.mid[len-1-(x)]
+int GPStart(int len) {
+	int x = 1;
+	//3日的mid呈上升形态
+	int c1 = M(0) >= M(1) && M(1) >= M(2);
+	x = x && c1;
+	//3日的MA5呈上升形态
+	int c2 = A(0) >= A(1) && A(1) >= A(2);
+	x = x && c2;
+	// 3日收盘价在mid之上
+	int c3 = (C(0)>= M(0) && C(1)>= M(1) && C(2)>=M(2));
+	x = x && c3;
+	// 3日的最低价距离mid不超过10%
+	int c4 = fabs(L(0)-M(0))/M(0) <= 0.1 && fabs(L(1)-M(1))/M(1) <= 0.1 && fabs(L(2)-M(2))/M(2) <= 0.1;
+	x = x && c4;
+	//当日最低价下探2%以上， 当日收盘价小于昨是收盘价
+	int c5 = (C(1)-L(0))/C(1) >= 0.02 && (C(0) < C(1));
+	x = x && c5;
+	
+	if (C(1) < C(2)) { //当日和昨日都是下跌的
+		int cx4 = (GET_MAX(C(2), H(1)) - L(0))/C(2) >= 0.05; //这两日下跌超过5% 
+		x = x && cx4;
+	} else { //昨日是上涨的
+		if (C(2) > C(3)) { //前日也是上涨的 
+			// 昨日或前日必须有一日振幅超过5% 且涨幅超过3%
+			int cx5 = (H(1)-C(2))/C(2) >= 0.05 && (C(1)-C(2))/C(2) >= 0.03;
+			int cx6 = (H(2)-C(3))/C(3) >= 0.05 && (C(2)-C(3))/C(3) >= 0.03;
+			x = x && (cx5 || cx6);
+		} else {//前日是下跌的
+			int cx5 = (H(1)-C(2))/C(2) >= 0.05 && (C(1)-C(2))/C(2) >= 0.03;
+			x = x && cx5;
+		}
+	}
+	return x;
+}
+#undef C 
+#undef H
+#undef M
+#undef L
+#undef A
+
+void GPStartSetParam_REF(int len, float* out, float* close, float* low, float* high) {
+	EnterCriticalSection(&start.mutex);
+	for (int i = 0; i < 10; ++i) {
+		start.close[9 - i] = close[len - 1 - i];
+		start.low[9 - i] = low[len - 1 - i];
+		start.high[9 - i] = high[len - 1 - i];
+	}
+}
+
+// 【形态选股】之股票启动  out = [0 or 1]
+void GPStart_REF(int len, float* out, float* mid, float* up, float *ma5) {
+	if (len < 15) {
+		out[len-1] = 0;
+		goto _end;
+	}
+	for (int i = 0; i < 10; ++i) {
+		start.mid[9 - i] = mid[len - 1 - i];
+		start.up[9 - i] = up[len - 1 - i];
+		start.ma5[9 - i] = ma5[len - 1 - i];
+	}
+	//近两日内存在？ 
+	out[len-1] = GPStart(10) || GPStart(9);
+	
+	_end:
+	LeaveCriticalSection(&start.mutex);
+}
+
+//------------------------------------------------------------------------------
 PluginTCalcFuncInfo g_CalcFuncSets[] = 
 {
 	{10,(pPluginFUNC)&Reset_REF},
@@ -537,6 +620,9 @@ PluginTCalcFuncInfo g_CalcFuncSets[] =
 	
 	{60,(pPluginFUNC)&IsStepBackBollMid_REF},
 	
+	{70,(pPluginFUNC)&GPStart_REF},
+	{71,(pPluginFUNC)&GPStartSetParam_REF},
+	
 	{100,(pPluginFUNC)&CalcTradeDayInfo_REF},
 	{101,(pPluginFUNC)&IsTradDay_REF},
 	{102,(pPluginFUNC)&IsTP_REF},
@@ -551,6 +637,7 @@ BOOL RegisterTdxFunc(PluginTCalcFuncInfo** pFun)
 		InitHolidays();
 		InitializeCriticalSection(&si.mutex);
 		InitializeCriticalSection(&bollSK.mutex);
+		InitializeCriticalSection(&start.mutex);
 		return TRUE;
 	}
 	
